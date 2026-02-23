@@ -144,33 +144,60 @@ turn_sel = st.selectbox("Select metric to plot (Turnover):",["Δ totalTurnover",
 plot_metric_chart(turn_df, turn_sel, "orange", "turn")
 
 # ------------------------------------------------------------
-# Volume Indicators + Consistency Signal
+# Volume Indicators + Color‑coded Consistency
 # ------------------------------------------------------------
 vol_df = build_summary("volume")
 st.subheader("📊 Volume & Price Indicators Summary")
 st.dataframe(vol_df[["time","Δ volume","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
 
-vol_sel = st.selectbox("Select metric to plot (Volume):",["Δ volume","RTR","TurnOsc","OBT","RollCorr"],key="vol_sel")
-plot_metric_chart(vol_df, vol_sel, "teal", "vol")
+# Compute consistency correlation
+vol_df["VolPriceCorr"] = vol_df["Δ volume"].rolling(3).corr(vol_df["Δ Price"])
 
-# --- Volume-Price Consistency Signal ---
+# Color for each bar
+def corr_to_color(c):
+    if pd.isna(c): return "gray"
+    if c >= 0.5: return "#008000"   # strong green
+    elif c > 0: return "#90EE90"    # light green
+    elif c <= -0.5: return "#8B0000" # strong red
+    elif c < 0: return "#FFA07A"    # light red
+    else: return "gray"
+
+vol_colors = [corr_to_color(c) for c in vol_df["VolPriceCorr"]]
+
+# Correlation summary
 corr = vol_df["Δ volume"].corr(vol_df["Δ Price"])
 if corr > 0.5:
-    vol_price_msg = "🟢 Volume increases with price increase — **confirming trend**"
+    msg = "🟢 Volume rises with price — confirming trend"
 elif corr < -0.5:
-    vol_price_msg = "🔴 Volume diverges from price — **weak or reversing move**"
+    msg = "🔴 Volume moves opposite to price — divergence"
 else:
-    vol_price_msg = "⚪ No clear consistency between volume & price"
+    msg = "⚪ Weak relationship"
 
 st.subheader("📈 Volume–Price Consistency Signal")
-st.markdown(f"**Correlation:** {corr:.2f}<br>{vol_price_msg}", unsafe_allow_html=True)
+st.markdown(f"**Overall Corr:** {corr:.2f}<br>{msg}", unsafe_allow_html=True)
 
-# Add rolling correlation visualization
-vol_df["VolPriceCorr"] = vol_df["Δ volume"].rolling(3).corr(vol_df["Δ Price"])
-plot_metric_chart(vol_df, "VolPriceCorr", "limegreen", "vol_corr")
+# Color‑coded ΔVolume chart
+fig_vol = go.Figure()
+fig_vol.add_bar(x=vol_df["time"], y=vol_df["Δ volume"],
+                marker_color=vol_colors, name="Δ Volume",
+                text=[f"Corr={c:.2f}" if not pd.isna(c) else "" for c in vol_df["VolPriceCorr"]],
+                hovertemplate="%{x}<br>ΔVol=%{y}<br>%{text}")
+fig_vol.update_layout(
+    title="Δ Volume vs Time (Color‑coded by Volume–Price Correlation)",
+    xaxis_title="Time",
+    yaxis_title="Δ Volume",
+    hovermode="x unified"
+)
+st.plotly_chart(fig_vol, use_container_width=True)
+
+# Show rolling correlation plot
+fig_corr = go.Figure()
+fig_corr.add_scatter(x=vol_df["time"], y=vol_df["VolPriceCorr"], mode="lines+markers", line=dict(color="gray"), name="Vol‑Price Corr (3‑period)")
+fig_corr.update_layout(title="Rolling Volume–Price Correlation", xaxis_title="Time", yaxis_title="Correlation")
+st.plotly_chart(fig_corr, use_container_width=True)
 
 # ------------------------------------------------------------
-# Number of Trades Indicators Table
+# Number of Trades Indicators
 # ------------------------------------------------------------
 trades_df = build_summary("noOfTrades")
 st.subheader("📊 Number of Trades & Price Indicators Summary")
