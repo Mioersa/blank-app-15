@@ -84,20 +84,14 @@ st.dataframe(final_df)
 # Helper functions
 # ------------------------------------------------------------
 def describe_rtr(x):
-    if x > 1.5:
-        return "🚀 High"
-    elif x < 0.7:
-        return "🧊 Low"
-    else:
-        return "⚪ Normal"
+    if x > 1.5: return "🚀 High"
+    elif x < 0.7: return "🧊 Low"
+    else: return "⚪ Normal"
 
 def describe_osc(x):
-    if x > 0:
-        return "🟢 Rising"
-    elif x < 0:
-        return "🔴 Falling"
-    else:
-        return "⚪ Flat"
+    if x > 0: return "🟢 Rising"
+    elif x < 0: return "🔴 Falling"
+    else: return "⚪ Flat"
 
 def build_summary(col_name):
     recs = []
@@ -124,6 +118,21 @@ def build_summary(col_name):
     df["TurnOsc_Signal"] = df["TurnOsc"].apply(describe_osc)
     return df
 
+def plot_metric_chart(df, col_name, color, section_key):
+    chart_type = st.radio("Chart Type", ["Line", "Bar"], key=f"{section_key}_chart_type")
+    if chart_type == "Line":
+        chart = go.Scatter(x=df["time"], y=df[col_name], mode="lines+markers", line=dict(color=color), name=col_name)
+    else:
+        chart = go.Bar(x=df["time"], y=df[col_name], marker_color=color, name=col_name)
+    fig = go.Figure([chart])
+    fig.update_layout(
+        title=f"{col_name} vs Time",
+        xaxis_title="Time",
+        yaxis_title=col_name,
+        hovermode="x unified"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 # ------------------------------------------------------------
 # Turnover Indicators Table
 # ------------------------------------------------------------
@@ -132,10 +141,7 @@ st.subheader("📊 Turnover & Price Indicators Summary")
 st.dataframe(turn_df[["time","Δ totalTurnover","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
 
 turn_sel = st.selectbox("Select metric to plot (Turnover):",["Δ totalTurnover","RTR","TurnOsc","OBT","RollCorr"],key="turn_sel")
-st.plotly_chart(go.Figure([
-    go.Scatter(x=turn_df["time"], y=turn_df[turn_sel],
-               mode="lines+markers", line=dict(color="orange"), name=turn_sel)
-]).update_layout(title=f"Turnover: {turn_sel} vs Time",xaxis_title="Time",yaxis_title=turn_sel,hovermode="x unified"),use_container_width=True)
+plot_metric_chart(turn_df, turn_sel, "orange", "turn")
 
 # ------------------------------------------------------------
 # Volume Indicators Table
@@ -145,10 +151,7 @@ st.subheader("📊 Volume & Price Indicators Summary")
 st.dataframe(vol_df[["time","Δ volume","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
 
 vol_sel = st.selectbox("Select metric to plot (Volume):",["Δ volume","RTR","TurnOsc","OBT","RollCorr"],key="vol_sel")
-st.plotly_chart(go.Figure([
-    go.Scatter(x=vol_df["time"], y=vol_df[vol_sel],
-               mode="lines+markers", line=dict(color="teal"), name=vol_sel)
-]).update_layout(title=f"Volume: {vol_sel} vs Time",xaxis_title="Time",yaxis_title=vol_sel,hovermode="x unified"),use_container_width=True)
+plot_metric_chart(vol_df, vol_sel, "teal", "vol")
 
 # ------------------------------------------------------------
 # Number of Trades Indicators Table
@@ -158,12 +161,7 @@ st.subheader("📊 Number of Trades & Price Indicators Summary")
 st.dataframe(trades_df[["time","Δ noOfTrades","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
 
 trade_sel = st.selectbox("Select metric to plot (No of Trades):",["Δ noOfTrades","RTR","TurnOsc","OBT","RollCorr"],key="trade_sel")
-st.plotly_chart(go.Figure([
-    go.Scatter(x=trades_df["time"], y=trades_df[trade_sel],
-               mode="lines+markers", line=dict(color="purple"), name=trade_sel)
-]).update_layout(title=f"No of Trades: {trade_sel} vs Time",
-                 xaxis_title="Time",yaxis_title=trade_sel,hovermode="x unified"),
-                 use_container_width=True)
+plot_metric_chart(trades_df, trade_sel, "purple", "trade")
 
 # ------------------------------------------------------------
 # 🛠️ Customizable Column Analytics
@@ -174,8 +172,7 @@ if st.button("Calculate Custom Summary"):
     recs=[]
     for lbl in upload_labels:
         sub=final_df[final_df["label"]==lbl]
-        if sub.empty:
-            continue
+        if sub.empty: continue
         val=sub[col_choice].iloc[0] if col_choice in sub else np.nan
         price=sub["lastPrice"].iloc[-1] if "lastPrice" in sub else np.nan
         recs.append({"time":lbl,col_choice:val,"last_price":price})
@@ -192,12 +189,12 @@ if st.button("Calculate Custom Summary"):
     customdf["RollCorr"]=customdf["Δ Price"].rolling(5).corr(customdf[dcol])
     customdf["RTR_Signal"]=customdf["RTR"].apply(describe_rtr)
     customdf["TurnOsc_Signal"]=customdf["TurnOsc"].apply(describe_osc)
+
     st.subheader(f"📊 Customised — {col_choice} & Price Indicators Summary")
     st.dataframe(customdf[["time",dcol,"Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
+
     sel=st.selectbox("Select metric to plot (Custom):",[dcol,"RTR","TurnOsc","OBT","RollCorr"],key="cust_sel")
-    st.plotly_chart(go.Figure([go.Scatter(x=customdf["time"],y=customdf[sel],mode="lines+markers",name=sel,line=dict(color="gray"))]
-                     ).update_layout(title=f"{col_choice}: {sel} vs Time",xaxis_title="Time",yaxis_title=sel,hovermode="x unified"),
-                     use_container_width=True)
+    plot_metric_chart(customdf, sel, "gray", "cust")
 
 # ------------------------------------------------------------
 # Legacy Chart + Overall Signal
