@@ -16,6 +16,7 @@ uploaded_files = st.sidebar.file_uploader(
     type="csv",
     accept_multiple_files=True,
 )
+
 if not uploaded_files:
     st.warning("👋 Upload at least one CSV.")
     st.stop()
@@ -33,12 +34,15 @@ for uploaded in uploaded_files:
         dd, mm, yyyy, HH, MM, SS = m.groups()
         base_time = datetime(int(yyyy), int(mm), int(dd), int(HH), int(MM), int(SS))
         label = f"{HH}:{MM}"
+
     upload_times.append(base_time)
     upload_labels.append(label)
 
     df = pd.read_csv(uploaded)
-    if "totalTurnover" not in df.columns or "volume" not in df.columns:
-        st.error("❌ Columns 'totalTurnover' and 'volume' not found.")
+    required_cols = {"totalTurnover", "volume", "noOfTrades"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        st.error(f"❌ Missing columns: {', '.join(missing)}")
         st.stop()
 
     df["totalTurnover"] = df["totalTurnover"].round(2)
@@ -104,7 +108,6 @@ def build_summary(col_name):
         val = sub[col_name].iloc[0]
         price = sub["lastPrice"].iloc[-1] if "lastPrice" in sub else np.nan
         recs.append({"time": lbl, col_name: val, "last_price": price})
-
     df = pd.DataFrame(recs)
     dcol = f"Δ {col_name}"
     df[dcol] = df[col_name].diff()
@@ -126,88 +129,98 @@ def build_summary(col_name):
 # ------------------------------------------------------------
 turn_df = build_summary("totalTurnover")
 st.subheader("📊 Turnover & Price Indicators Summary")
-st.dataframe(turn_df[[ "time","Δ totalTurnover","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
+st.dataframe(turn_df[["time","Δ totalTurnover","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
 
-turn_sel = st.selectbox("Select metric to plot (Turnover):",
-                        ["Δ totalTurnover","RTR","TurnOsc","OBT","RollCorr"], key="turn_sel")
-fig_turn = go.Figure([go.Scatter(x=turn_df["time"], y=turn_df[turn_sel],
-                                 mode="lines+markers", line=dict(color="orange"))])
-fig_turn.update_layout(title=f"Turnover: {turn_sel} vs Time", xaxis_title="Time", yaxis_title=turn_sel)
-st.plotly_chart(fig_turn, use_container_width=True)
+turn_sel = st.selectbox("Select metric to plot (Turnover):",["Δ totalTurnover","RTR","TurnOsc","OBT","RollCorr"],key="turn_sel")
+st.plotly_chart(go.Figure([
+    go.Scatter(x=turn_df["time"], y=turn_df[turn_sel],
+               mode="lines+markers", line=dict(color="orange"), name=turn_sel)
+]).update_layout(title=f"Turnover: {turn_sel} vs Time",xaxis_title="Time",yaxis_title=turn_sel,hovermode="x unified"),use_container_width=True)
 
 # ------------------------------------------------------------
 # Volume Indicators Table
 # ------------------------------------------------------------
 vol_df = build_summary("volume")
 st.subheader("📊 Volume & Price Indicators Summary")
-st.dataframe(vol_df[[ "time","Δ volume","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
+st.dataframe(vol_df[["time","Δ volume","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
 
-vol_sel = st.selectbox("Select metric to plot (Volume):",
-                       ["Δ volume","RTR","TurnOsc","OBT","RollCorr"], key="vol_sel")
-fig_vol = go.Figure([go.Scatter(x=vol_df["time"], y=vol_df[vol_sel],
-                                mode="lines+markers", line=dict(color="teal"))])
-fig_vol.update_layout(title=f"Volume: {vol_sel} vs Time", xaxis_title="Time", yaxis_title=vol_sel)
-st.plotly_chart(fig_vol, use_container_width=True)
+vol_sel = st.selectbox("Select metric to plot (Volume):",["Δ volume","RTR","TurnOsc","OBT","RollCorr"],key="vol_sel")
+st.plotly_chart(go.Figure([
+    go.Scatter(x=vol_df["time"], y=vol_df[vol_sel],
+               mode="lines+markers", line=dict(color="teal"), name=vol_sel)
+]).update_layout(title=f"Volume: {vol_sel} vs Time",xaxis_title="Time",yaxis_title=vol_sel,hovermode="x unified"),use_container_width=True)
+
+# ------------------------------------------------------------
+# Number of Trades Indicators Table
+# ------------------------------------------------------------
+trades_df = build_summary("noOfTrades")
+st.subheader("📊 Number of Trades & Price Indicators Summary")
+st.dataframe(trades_df[["time","Δ noOfTrades","Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
+
+trade_sel = st.selectbox("Select metric to plot (No of Trades):",["Δ noOfTrades","RTR","TurnOsc","OBT","RollCorr"],key="trade_sel")
+st.plotly_chart(go.Figure([
+    go.Scatter(x=trades_df["time"], y=trades_df[trade_sel],
+               mode="lines+markers", line=dict(color="purple"), name=trade_sel)
+]).update_layout(title=f"No of Trades: {trade_sel} vs Time",
+                 xaxis_title="Time",yaxis_title=trade_sel,hovermode="x unified"),
+                 use_container_width=True)
 
 # ------------------------------------------------------------
 # 🛠️ Customizable Column Analytics
 # ------------------------------------------------------------
 st.subheader("🛠️ Customizable Column Analytics")
-
 col_choice = st.selectbox("Select a column from combined data to analyze", final_df.columns, key="custom_col")
 if st.button("Calculate Custom Summary"):
-    recs = []
+    recs=[]
     for lbl in upload_labels:
-        sub = final_df[final_df["label"] == lbl]
+        sub=final_df[final_df["label"]==lbl]
         if sub.empty:
             continue
-        val = sub[col_choice].iloc[0] if col_choice in sub else np.nan
-        last_price = sub["lastPrice"].iloc[-1] if "lastPrice" in sub else np.nan
-        recs.append({"time": lbl, col_choice: val, "last_price": last_price})
-
-    customdf = pd.DataFrame(recs)
-    dcol = f"Δ {col_choice}"
-    customdf[dcol] = customdf[col_choice].diff()
-    customdf["Δ Price"] = customdf["last_price"].diff()
-    customdf["OBT"] = (np.sign(customdf["Δ Price"].fillna(0)) * customdf[dcol].fillna(0)).cumsum()
-    m, s = customdf[dcol].mean(), customdf[dcol].std()
-    customdf["spike_flag"] = customdf[dcol] > (m + 2 * s)
-    customdf["RTR"] = customdf[dcol] / customdf[dcol].rolling(5, min_periods=1).mean()
-    ema_s, ema_l = customdf[dcol].ewm(span=3, adjust=False).mean(), customdf[dcol].ewm(span=10, adjust=False).mean()
-    customdf["TurnOsc"] = ema_s - ema_l
-    customdf["RollCorr"] = customdf["Δ Price"].rolling(5).corr(customdf[dcol])
-    customdf["RTR_Signal"] = customdf["RTR"].apply(describe_rtr)
-    customdf["TurnOsc_Signal"] = customdf["TurnOsc"].apply(describe_osc)
-
+        val=sub[col_choice].iloc[0] if col_choice in sub else np.nan
+        price=sub["lastPrice"].iloc[-1] if "lastPrice" in sub else np.nan
+        recs.append({"time":lbl,col_choice:val,"last_price":price})
+    customdf=pd.DataFrame(recs)
+    dcol=f"Δ {col_choice}"
+    customdf[dcol]=customdf[col_choice].diff()
+    customdf["Δ Price"]=customdf["last_price"].diff()
+    customdf["OBT"]=(np.sign(customdf["Δ Price"].fillna(0))*customdf[dcol].fillna(0)).cumsum()
+    m,s=customdf[dcol].mean(),customdf[dcol].std()
+    customdf["spike_flag"]=customdf[dcol]>(m+2*s)
+    customdf["RTR"]=customdf[dcol]/customdf[dcol].rolling(5,min_periods=1).mean()
+    ema_s,ema_l=customdf[dcol].ewm(span=3,adjust=False).mean(),customdf[dcol].ewm(span=10,adjust=False).mean()
+    customdf["TurnOsc"]=ema_s-ema_l
+    customdf["RollCorr"]=customdf["Δ Price"].rolling(5).corr(customdf[dcol])
+    customdf["RTR_Signal"]=customdf["RTR"].apply(describe_rtr)
+    customdf["TurnOsc_Signal"]=customdf["TurnOsc"].apply(describe_osc)
     st.subheader(f"📊 Customised — {col_choice} & Price Indicators Summary")
-    st.dataframe(customdf[[ "time", dcol, "Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
-
-    sel_metric = st.selectbox("Select column to plot (Custom):",
-                              [dcol,"RTR","TurnOsc","OBT","RollCorr"], key="custom_sel")
-    fig_custom = go.Figure([go.Scatter(x=customdf["time"], y=customdf[sel_metric],
-                                       mode="lines+markers", line=dict(color="purple"))])
-    fig_custom.update_layout(title=f"{col_choice}: {sel_metric} vs Time",
-                             xaxis_title="Time", yaxis_title=sel_metric)
-    st.plotly_chart(fig_custom, use_container_width=True)
+    st.dataframe(customdf[["time",dcol,"Δ Price","RTR","RTR_Signal","TurnOsc","TurnOsc_Signal","OBT","spike_flag","RollCorr"]])
+    sel=st.selectbox("Select metric to plot (Custom):",[dcol,"RTR","TurnOsc","OBT","RollCorr"],key="cust_sel")
+    st.plotly_chart(go.Figure([go.Scatter(x=customdf["time"],y=customdf[sel],mode="lines+markers",name=sel,line=dict(color="gray"))]
+                     ).update_layout(title=f"{col_choice}: {sel} vs Time",xaxis_title="Time",yaxis_title=sel,hovermode="x unified"),
+                     use_container_width=True)
 
 # ------------------------------------------------------------
-# Legacy combined chart & overall signal
+# Legacy Chart + Overall Signal
 # ------------------------------------------------------------
-axis_type = st.radio("Δ Turnover Y‑axis scale", ["linear", "log"], horizontal=True)
-fig1 = go.Figure()
-fig1.add_bar(x=turn_df["time"], y=turn_df["Δ totalTurnover"], name="Δ Turnover", marker_color="orange", opacity=0.6)
-fig1.add_scatter(x=turn_df["time"], y=turn_df["last_price"], mode="lines+markers", name="Last Price", yaxis="y2", line=dict(color="blue"))
-fig1.update_layout(title=f"Δ Turnover & Price – Expiry {selected_expiry}",
-                   xaxis=dict(title="Time", rangeslider=dict(visible=True)),
-                   yaxis2=dict(title="Price", overlaying="y", side="right"),
-                   height=600, hovermode="x unified")
-st.plotly_chart(fig1, use_container_width=True)
+axis_type = st.radio("Δ Turnover Y‑axis scale", ["linear","log"], horizontal=True)
+fig1=go.Figure()
+fig1.add_bar(x=turn_df["time"],y=turn_df["Δ totalTurnover"],name="Δ Turnover",marker_color="orange",opacity=0.6)
+fig1.add_scatter(x=turn_df["time"],y=turn_df["last_price"],mode="lines+markers",name="Last Price",yaxis="y2",line=dict(color="blue"))
+fig1.update_layout(title=f"Δ Turnover and Price – Expiry {selected_expiry}",
+                   xaxis=dict(title="Time",rangeslider=dict(visible=True)),
+                   yaxis2=dict(title="Price",overlaying="y",side="right"),
+                   height=600,hovermode="x unified")
+st.plotly_chart(fig1,use_container_width=True)
 
-# simple auto-signal
-last_rows = turn_df.tail(5)
-slope = np.sign(last_rows["Cum"].iloc[-1] - last_rows["Cum"].iloc[0])
-corr_sign = np.sign(turn_df["RollCorr"].iloc[-1])
-score = slope * corr_sign
-overall_signal = "🟢 **Bullish Accumulation**" if score > 0 else ("🔴 **Bearish Distribution**" if score < 0 else "⚪ **Neutral Flow**")
+last_rows=turn_df.tail(5)
+slope=np.sign(last_rows["Cum"].iloc[-1]-last_rows["Cum"].iloc[0])
+corr_sign=np.sign(turn_df["RollCorr"].iloc[-1])
+score=slope*corr_sign
+if score>0:
+    overall_signal="🟢 **Bullish Accumulation in Turnover**"
+elif score<0:
+    overall_signal="🔴 **Bearish Distribution in Turnover**"
+else:
+    overall_signal="⚪ **Neutral Turnover Flow**"
 st.subheader("📈 Overall Auto‑Signal")
 st.markdown(overall_signal)
