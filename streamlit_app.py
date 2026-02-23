@@ -144,7 +144,7 @@ turn_sel = st.selectbox("Select metric to plot (Turnover):",["Δ totalTurnover",
 plot_metric_chart(turn_df, turn_sel, "orange", "turn")
 
 # ------------------------------------------------------------
-# Volume Indicators Table
+# Volume Indicators + Consistency Signal
 # ------------------------------------------------------------
 vol_df = build_summary("volume")
 st.subheader("📊 Volume & Price Indicators Summary")
@@ -152,6 +152,22 @@ st.dataframe(vol_df[["time","Δ volume","Δ Price","RTR","RTR_Signal","TurnOsc",
 
 vol_sel = st.selectbox("Select metric to plot (Volume):",["Δ volume","RTR","TurnOsc","OBT","RollCorr"],key="vol_sel")
 plot_metric_chart(vol_df, vol_sel, "teal", "vol")
+
+# --- Volume-Price Consistency Signal ---
+corr = vol_df["Δ volume"].corr(vol_df["Δ Price"])
+if corr > 0.5:
+    vol_price_msg = "🟢 Volume increases with price increase — **confirming trend**"
+elif corr < -0.5:
+    vol_price_msg = "🔴 Volume diverges from price — **weak or reversing move**"
+else:
+    vol_price_msg = "⚪ No clear consistency between volume & price"
+
+st.subheader("📈 Volume–Price Consistency Signal")
+st.markdown(f"**Correlation:** {corr:.2f}<br>{vol_price_msg}", unsafe_allow_html=True)
+
+# Add rolling correlation visualization
+vol_df["VolPriceCorr"] = vol_df["Δ volume"].rolling(3).corr(vol_df["Δ Price"])
+plot_metric_chart(vol_df, "VolPriceCorr", "limegreen", "vol_corr")
 
 # ------------------------------------------------------------
 # Number of Trades Indicators Table
